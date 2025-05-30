@@ -1,0 +1,231 @@
+import psycopg2
+
+# Connexion à la base PostgreSQL
+conn = psycopg2.connect(
+    dbname="postgres",
+    user="postgres",
+    password="postgrepc",
+    host="localhost",
+    port="5432"
+)
+
+cur = conn.cursor()
+
+# Liste des requêtes de création des tables
+create_table_queries = [
+
+    # ScoreboardGames
+    """
+    CREATE TABLE IF NOT EXISTS ScoreboardGames (
+        OverviewPage TEXT,
+        Tournament TEXT,
+        Team1 TEXT,
+        Team2 TEXT,
+        WinTeam TEXT,
+        LossTeam TEXT,
+        DateTime_UTC TIMESTAMP,
+        DST TEXT,
+        Team1Score INTEGER,
+        Team2Score INTEGER,
+        Winner INTEGER,
+        Gamelength TEXT,
+        Gamelength_Number FLOAT,
+        Team1Bans TEXT[],
+        Team2Bans TEXT[],
+        Team1Picks TEXT[],
+        Team2Picks TEXT[],
+        Team1Players TEXT[],
+        Team2Players TEXT[],
+        Team1Dragons INTEGER,
+        Team2Dragons INTEGER,
+        Team1Barons INTEGER,
+        Team2Barons INTEGER,
+        Team1Towers INTEGER,
+        Team2Towers INTEGER,
+        Team1Gold FLOAT,
+        Team2Gold FLOAT,
+        Team1Kills INTEGER,
+        Team2Kills INTEGER,
+        Team1RiftHeralds INTEGER,
+        Team2RiftHeralds INTEGER,
+        Team1VoidGrubs INTEGER,
+        Team2VoidGrubs INTEGER,
+        Team1Atakhans INTEGER,
+        Team2Atakhans INTEGER,
+        Team1Inhibitors INTEGER,
+        Team2Inhibitors INTEGER,
+        Patch TEXT,
+        LegacyPatch TEXT,
+        PatchSort TEXT,
+        MatchHistory TEXT,
+        VOD TEXT,
+        N_Page INTEGER,
+        N_MatchInTab INTEGER,
+        N_MatchInPage INTEGER,
+        N_GameInMatch INTEGER,
+        Gamename TEXT,
+        UniqueLine TEXT,
+        GameId TEXT,
+        MatchId TEXT,
+        RiotPlatformGameId TEXT,
+        RiotPlatformId TEXT,
+        RiotGameId TEXT,
+        RiotHash TEXT,
+        RiotVersion INTEGER
+    );
+    """,
+
+    # ScoreboardPlayers
+    """
+    CREATE TABLE IF NOT EXISTS ScoreboardPlayers (
+        OverviewPage TEXT,
+        Name TEXT,
+        Link TEXT,
+        Champion TEXT,
+        Kills INTEGER,
+        Deaths INTEGER,
+        Assists INTEGER,
+        SummonerSpells TEXT[],
+        Gold INTEGER,
+        CS INTEGER,
+        DamageToChampions INTEGER,
+        VisionScore INTEGER,
+        Items TEXT[],
+        Trinket TEXT,
+        KeystoneMastery TEXT,
+        KeystoneRune TEXT,
+        PrimaryTree TEXT,
+        SecondaryTree TEXT,
+        Runes TEXT,
+        TeamKills INTEGER,
+        TeamGold INTEGER,
+        Team TEXT,
+        TeamVs TEXT,
+        Time TIMESTAMP,
+        PlayerWin TEXT,
+        DateTime_UTC TIMESTAMP,
+        DST TEXT,
+        Tournament TEXT,
+        Role TEXT,
+        Role_Number INTEGER,
+        IngameRole TEXT,
+        Side INTEGER,
+        UniqueLine TEXT,
+        UniqueLineVs TEXT,
+        UniqueRole TEXT,
+        UniqueRoleVs TEXT,
+        GameId TEXT,
+        MatchId TEXT,
+        GameTeamId TEXT,
+        GameRoleId TEXT,
+        GameRoleIdVs TEXT,
+        StatsPage TEXT
+    );
+    """,
+
+    # CurrentLeagues
+    """
+    CREATE TABLE IF NOT EXISTS CurrentLeagues (
+        Event TEXT,
+        OverviewPage TEXT,
+        Priority INTEGER
+    );
+    """,
+
+    # Leagues
+    """
+    CREATE TABLE IF NOT EXISTS Leagues (
+        League TEXT,
+        League_Short TEXT,
+        Region TEXT,
+        Level TEXT,
+        IsOfficial TEXT
+    );
+    """,
+
+    # Tournaments
+    """
+    CREATE TABLE IF NOT EXISTS Tournaments (
+        Name TEXT,
+        OverviewPage TEXT,
+        DateStart DATE,
+        "Date" DATE,
+        DateStartFuzzy DATE,
+        League TEXT,
+        Region TEXT,
+        Prizepool TEXT,
+        Currency TEXT,
+        Country TEXT,
+        ClosestTimezone TEXT,
+        Rulebook TEXT,
+        EventType TEXT,
+        Links TEXT,
+        Sponsors TEXT,
+        Organizer TEXT,
+        Organizers TEXT,
+        StandardName TEXT,
+        StandardName_Redirect TEXT,
+        BasePage TEXT,
+        Split TEXT,
+        SplitNumber INTEGER,
+        SplitMainPage TEXT,
+        TournamentLevel TEXT,
+        IsQualifier BOOLEAN,
+        IsPlayoffs BOOLEAN,
+        IsOfficial BOOLEAN,
+        "Year" TEXT,
+        LeagueIconKey TEXT,
+        AlternativeNames TEXT[],
+        ScrapeLink TEXT,
+        Tags TEXT[],
+        SuppressTopSchedule BOOLEAN
+    );
+    """,
+
+    # Organizations
+    """
+    CREATE TABLE IF NOT EXISTS Organizations (
+        Name TEXT,
+        OverviewPage TEXT,
+        Location TEXT,
+        Region TEXT,
+        Image TEXT,
+        Twitter TEXT,
+        Youtube TEXT,
+        Facebook TEXT,
+        Instagram TEXT,
+        Discord TEXT,
+        Snapchat TEXT,
+        Vk TEXT,
+        Subreddit TEXT,
+        IsLowercase BOOLEAN
+    );
+    """,
+
+    # PlayerImages
+    """
+    CREATE TABLE IF NOT EXISTS PlayerImages (
+        FileName TEXT,
+        Link TEXT,
+        Team TEXT,
+        Tournament TEXT,
+        ImageType TEXT,
+        Caption TEXT,
+        IsProfileImage BOOLEAN,
+        SortDate DATE
+    );
+    """
+]
+
+# Exécution des requêtes
+for query in create_table_queries:
+    cur.execute(query)
+
+# Validation des changements
+conn.commit()
+
+# Fermeture de la connexion
+cur.close()
+conn.close()
+
+print("✅ Toutes les tables ont été créées avec succès.")

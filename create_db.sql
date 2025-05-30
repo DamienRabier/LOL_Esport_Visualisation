@@ -1,51 +1,181 @@
--- Table des équipes
-CREATE TABLE teams (
-    team_id SERIAL PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,
-    region TEXT,
-    foundation DATE
+CREATE TABLE ScoreboardGames (
+    OverviewPage TEXT,
+    Tournament TEXT,
+    Team1 TEXT,
+    Team2 TEXT,
+    WinTeam TEXT,
+    LossTeam TEXT,
+    DateTime_UTC TIMESTAMP,
+    DST TEXT,
+    Team1Score INTEGER,
+    Team2Score INTEGER,
+    Winner INTEGER,
+    Gamelength TEXT,
+    Gamelength_Number FLOAT,
+    Team1Bans TEXT[],
+    Team2Bans TEXT[],
+    Team1Picks TEXT[],
+    Team2Picks TEXT[],
+    Team1Players TEXT[],
+    Team2Players TEXT[],
+    Team1Dragons INTEGER,
+    Team2Dragons INTEGER,
+    Team1Barons INTEGER,
+    Team2Barons INTEGER,
+    Team1Towers INTEGER,
+    Team2Towers INTEGER,
+    Team1Gold FLOAT,
+    Team2Gold FLOAT,
+    Team1Kills INTEGER,
+    Team2Kills INTEGER,
+    Team1RiftHeralds INTEGER,
+    Team2RiftHeralds INTEGER,
+    Team1VoidGrubs INTEGER,
+    Team2VoidGrubs INTEGER,
+    Team1Atakhans INTEGER,
+    Team2Atakhans INTEGER,
+    Team1Inhibitors INTEGER,
+    Team2Inhibitors INTEGER,
+    Patch TEXT,
+    LegacyPatch TEXT,
+    PatchSort TEXT,
+    MatchHistory TEXT,
+    VOD TEXT,
+    N_Page INTEGER,
+    N_MatchInTab INTEGER,
+    N_MatchInPage INTEGER,
+    N_GameInMatch INTEGER,
+    Gamename TEXT,
+    UniqueLine TEXT,
+    GameId TEXT,
+    MatchId TEXT,
+    RiotPlatformGameId TEXT,
+    RiotPlatformId TEXT,
+    RiotGameId TEXT,
+    RiotHash TEXT,
+    RiotVersion INTEGER
 );
 
--- Table des joueurs
-CREATE TABLE players (
-    player_id SERIAL PRIMARY KEY,
-    name TEXT NOT NULL,
-    join_date DATE,
-    current_team_id INT REFERENCES teams(team_id),
-    country TEXT,
-    role TEXT
+CREATE TABLE ScoreboardPlayers (
+    OverviewPage TEXT,
+    Name TEXT,
+    Link TEXT,
+    Champion TEXT,
+    Kills INTEGER,
+    Deaths INTEGER,
+    Assists INTEGER,
+    SummonerSpells TEXT[],
+    Gold INTEGER,
+    CS INTEGER,
+    DamageToChampions INTEGER,
+    VisionScore INTEGER,
+    Items TEXT[],
+    Trinket TEXT,
+    KeystoneMastery TEXT,
+    KeystoneRune TEXT,
+    PrimaryTree TEXT,
+    SecondaryTree TEXT,
+    Runes TEXT,
+    TeamKills INTEGER,
+    TeamGold INTEGER,
+    Team TEXT,
+    TeamVs TEXT,
+    Time TIMESTAMP,
+    PlayerWin TEXT,
+    DateTime_UTC TIMESTAMP,
+    DST TEXT,
+    Tournament TEXT,
+    Role TEXT,
+    Role_Number INTEGER,
+    IngameRole TEXT,
+    Side INTEGER,
+    UniqueLine TEXT,
+    UniqueLineVs TEXT,
+    UniqueRole TEXT,
+    UniqueRoleVs TEXT,
+    GameId TEXT,
+    MatchId TEXT,
+    GameTeamId TEXT,
+    GameRoleId TEXT,
+    GameRoleIdVs TEXT,
+    StatsPage TEXT
 );
 
--- Table des champions
-CREATE TABLE champions (
-    champion_id SERIAL PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE
+CREATE TABLE Tournaments (
+    Name TEXT,
+    OverviewPage TEXT,
+    DateStart DATE,
+    'Date' DATE,
+    DateStartFuzzy DATE,
+    League TEXT,
+    Region TEXT,
+    Prizepool TEXT,
+    Currency TEXT,
+    Country TEXT,
+    ClosestTimezone TEXT,
+    Rulebook TEXT,
+    EventType TEXT,
+    Links TEXT,
+    Sponsors TEXT,
+    Organizer TEXT,
+    Organizers TEXT,
+    StandardName TEXT,
+    StandardName_Redirect TEXT,
+    BasePage TEXT,
+    Split TEXT,
+    SplitNumber INTEGER,
+    SplitMainPage TEXT,
+    TournamentLevel TEXT,
+    IsQualifier BOOLEAN,
+    IsPlayoffs BOOLEAN,
+    IsOfficial BOOLEAN,
+    'Year' TEXT,
+    LeagueIconKey TEXT,
+    AlternativeNames TEXT[],
+    ScrapeLink TEXT,
+    Tags TEXT[],
+    SuppressTopSchedule BOOLEAN
 );
 
--- Table des parties (games)
-CREATE TABLE games (
-    game_id SERIAL PRIMARY KEY,
-    date TIMESTAMP,
-    blue_team_id INT REFERENCES teams(team_id),
-    red_team_id INT REFERENCES teams(team_id),
-    winner_team_id INT REFERENCES teams(team_id),
-    duration_minutes FLOAT,
-    patch TEXT,
-    tournament TEXT
+CREATE TABLE PlayerImages (
+    FileName TEXT,
+    Link TEXT,
+    Team TEXT,
+    Tournament TEXT,
+    ImageType TEXT,
+    Caption TEXT,
+    IsProfileImage BOOLEAN,
+    SortDate DATE
 );
 
--- Table des statistiques des joueurs en match
-CREATE TABLE player_stats (
-    player_id INT REFERENCES players(player_id),
-    game_id INT REFERENCES games(game_id),
-    team_id INT REFERENCES teams(team_id),
-    champion_id INT REFERENCES champions(champion_id),
-    kills INT,
-    deaths INT,
-    assists INT,
-    cs INT,
-    gold INT,
-    kda FLOAT,
-    position TEXT,
-    PRIMARY KEY (player_id, game_id)
+CREATE TABLE CurrentLeagues (
+    Event TEXT,
+    OverviewPage TEXT,
+    Priority INTEGER
 );
+
+CREATE TABLE Leagues (
+    League TEXT,
+    League_Short TEXT,
+    Region TEXT,
+    Level TEXT,
+    IsOfficial TEXT
+);
+
+CREATE TABLE Organizations (
+    Name TEXT,
+    OverviewPage TEXT,
+    Location TEXT,
+    Region TEXT,
+    Image TEXT,
+    Twitter TEXT,
+    Youtube TEXT,
+    Facebook TEXT,
+    Instagram TEXT,
+    Discord TEXT,
+    Snapchat TEXT,
+    Vk TEXT,
+    Subreddit TEXT,
+    IsLowercase BOOLEAN
+);
+
