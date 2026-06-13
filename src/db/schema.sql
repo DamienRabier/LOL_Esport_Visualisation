@@ -1,0 +1,165 @@
+-- Leaguepedia esports schema (PostgreSQL).
+-- Mirrors the Cargo tables we ingest. Natural keys come from Cargo's own
+-- unique identifiers (GameId, UniqueLine, OverviewPage) so re-ingesting the
+-- same data updates rather than duplicates rows.
+
+CREATE TABLE IF NOT EXISTS ScoreboardGames (
+    GameId              TEXT PRIMARY KEY,
+    OverviewPage        TEXT,
+    Tournament          TEXT,
+    Team1               TEXT,
+    Team2               TEXT,
+    WinTeam             TEXT,
+    LossTeam            TEXT,
+    DateTime_UTC        TIMESTAMP,
+    DST                 TEXT,
+    Team1Score          INTEGER,
+    Team2Score          INTEGER,
+    Winner              INTEGER,
+    Gamelength          TEXT,
+    Gamelength_Number   REAL,
+    Team1Bans           TEXT[],
+    Team2Bans           TEXT[],
+    Team1Picks          TEXT[],
+    Team2Picks          TEXT[],
+    Team1Players        TEXT[],
+    Team2Players        TEXT[],
+    Team1Dragons        INTEGER,
+    Team2Dragons        INTEGER,
+    Team1Barons         INTEGER,
+    Team2Barons         INTEGER,
+    Team1Towers         INTEGER,
+    Team2Towers         INTEGER,
+    Team1Gold           REAL,
+    Team2Gold           REAL,
+    Team1Kills          INTEGER,
+    Team2Kills          INTEGER,
+    Team1RiftHeralds    INTEGER,
+    Team2RiftHeralds    INTEGER,
+    Team1VoidGrubs      INTEGER,
+    Team2VoidGrubs      INTEGER,
+    Team1Atakhans       INTEGER,
+    Team2Atakhans       INTEGER,
+    Team1Inhibitors     INTEGER,
+    Team2Inhibitors     INTEGER,
+    Patch               TEXT,
+    LegacyPatch         TEXT,
+    PatchSort           TEXT,
+    MatchHistory        TEXT,
+    VOD                 TEXT,
+    N_Page              INTEGER,
+    N_MatchInTab        INTEGER,
+    N_MatchInPage       INTEGER,
+    N_GameInMatch       INTEGER,
+    Gamename            TEXT,
+    UniqueLine          TEXT,
+    MatchId             TEXT,
+    RiotPlatformGameId  TEXT,
+    RiotPlatformId      TEXT,
+    RiotGameId          TEXT,
+    RiotHash            TEXT,
+    RiotVersion         INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_sg_team1 ON ScoreboardGames (Team1);
+CREATE INDEX IF NOT EXISTS idx_sg_team2 ON ScoreboardGames (Team2);
+CREATE INDEX IF NOT EXISTS idx_sg_tournament ON ScoreboardGames (Tournament);
+CREATE INDEX IF NOT EXISTS idx_sg_datetime ON ScoreboardGames (DateTime_UTC);
+
+CREATE TABLE IF NOT EXISTS ScoreboardPlayers (
+    UniqueLine          TEXT PRIMARY KEY,
+    OverviewPage        TEXT,
+    Name                TEXT,
+    Link                TEXT,
+    Champion            TEXT,
+    Kills               INTEGER,
+    Deaths              INTEGER,
+    Assists             INTEGER,
+    SummonerSpells      TEXT[],
+    Gold                INTEGER,
+    CS                  INTEGER,
+    DamageToChampions   INTEGER,
+    VisionScore         INTEGER,
+    Items               TEXT[],
+    Trinket             TEXT,
+    KeystoneMastery     TEXT,
+    KeystoneRune        TEXT,
+    PrimaryTree         TEXT,
+    SecondaryTree       TEXT,
+    Runes               TEXT,
+    TeamKills           INTEGER,
+    TeamGold            INTEGER,
+    Team                TEXT,
+    TeamVs              TEXT,
+    "Time"              TIMESTAMP,
+    PlayerWin           TEXT,
+    DateTime_UTC        TIMESTAMP,
+    DST                 TEXT,
+    Tournament          TEXT,
+    Role                TEXT,
+    Role_Number         INTEGER,
+    IngameRole          TEXT,
+    Side                INTEGER,
+    UniqueLineVs        TEXT,
+    UniqueRole          TEXT,
+    UniqueRoleVs        TEXT,
+    GameId              TEXT,
+    MatchId             TEXT,
+    GameTeamId          TEXT,
+    GameRoleId          TEXT,
+    GameRoleIdVs        TEXT,
+    StatsPage           TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_sp_gameid ON ScoreboardPlayers (GameId);
+CREATE INDEX IF NOT EXISTS idx_sp_link ON ScoreboardPlayers (Link);
+CREATE INDEX IF NOT EXISTS idx_sp_team ON ScoreboardPlayers (Team);
+CREATE INDEX IF NOT EXISTS idx_sp_champion ON ScoreboardPlayers (Champion);
+
+CREATE TABLE IF NOT EXISTS Tournaments (
+    OverviewPage        TEXT PRIMARY KEY,
+    Name                TEXT,
+    DateStart           DATE,
+    "Date"              DATE,
+    DateStartFuzzy      DATE,
+    League              TEXT,
+    Region              TEXT,
+    Prizepool           TEXT,
+    Currency            TEXT,
+    Country             TEXT,
+    ClosestTimezone     TEXT,
+    Rulebook            TEXT,
+    EventType           TEXT,
+    Links               TEXT,
+    Sponsors            TEXT,
+    Organizer           TEXT,
+    Organizers          TEXT,
+    StandardName        TEXT,
+    StandardName_Redirect TEXT,
+    BasePage            TEXT,
+    Split               TEXT,
+    SplitNumber         INTEGER,
+    SplitMainPage       TEXT,
+    TournamentLevel     TEXT,
+    IsQualifier         BOOLEAN,
+    IsPlayoffs          BOOLEAN,
+    IsOfficial          BOOLEAN,
+    "Year"              TEXT,
+    LeagueIconKey       TEXT,
+    AlternativeNames    TEXT[],
+    ScrapeLink          TEXT,
+    Tags                TEXT[],
+    SuppressTopSchedule BOOLEAN
+);
+
+CREATE TABLE IF NOT EXISTS Leagues (
+    League        TEXT PRIMARY KEY,
+    League_Short  TEXT,
+    Region        TEXT,
+    Level         TEXT,
+    IsOfficial    TEXT
+);
+
+CREATE TABLE IF NOT EXISTS CurrentLeagues (
+    OverviewPage  TEXT PRIMARY KEY,
+    Event         TEXT,
+    Priority      INTEGER
+);

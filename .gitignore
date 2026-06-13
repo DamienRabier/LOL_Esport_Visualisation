@@ -1,0 +1,22 @@
+# Environment / secrets
+.env
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.ipynb_checkpoints/
+
+# Data caches
+data/
+*.csv
+*.parquet
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/

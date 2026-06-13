@@ -1,0 +1,23 @@
+# Leaguepedia (MediaWiki / Cargo) API client
+mwrogue>=0.1.5
+
+# Data handling
+pandas>=2.0
+
+# PostgreSQL
+psycopg2-binary>=2.9
+SQLAlchemy>=2.0
+
+# Oracle's Elixir match-data downloads (hosted on Google Drive)
+gdown>=5.1
+
+# Config
+python-dotenv>=1.0
+
+# Notebooks / analysis (optional, used later for debrief & scouting)
+# NOTE: full JupyterLab is intentionally NOT pinned here — its bundled files
+# overflow Windows' 260-char path limit unless long paths are enabled (admin).
+# ipykernel is enough to run notebooks inside VS Code. To get classic
+# JupyterLab later: enable long paths, then `pip install jupyterlab`.
+ipykernel>=6.29
+matplotlib>=3.7
