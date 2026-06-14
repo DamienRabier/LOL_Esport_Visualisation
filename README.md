@@ -22,6 +22,7 @@ Leaguepedia Cargo API  ──►  pandas  ──►  PostgreSQL  ──►  anal
 | `src/db/loader.py` | Idempotent upserts (re-running won't duplicate rows). |
 | `src/oracleselixir.py` | Oracle's Elixir loader (advanced lane-diff stats). |
 | `src/etl/run.py` | CLI: fetch a tournament/team and load it to the DB. |
+| `app.py` + `src/dashboard/` | Streamlit debrief & scouting dashboard. |
 | `notebooks/` | Analysis / visualization notebooks (debrief, scouting). |
 
 ## What's different from the old version
@@ -82,6 +83,21 @@ python -m src.etl.run current-leagues
 # Oracle's Elixir advanced stats for a year (gold/xp/cs diffs at 10/15/20/25, etc.)
 python -m src.etl.run oe 2026
 ```
+
+### Dashboard
+
+An interactive Streamlit dashboard for debrief & scouting:
+
+```powershell
+streamlit run app.py
+```
+
+It opens in your browser (http://localhost:8501) and reads straight from
+Postgres. Pick a tournament in the sidebar; tabs cover **Overview** (KPIs,
+most picked/banned), **Team scouting** (record, side win-rates, objective
+control, champion pool, bans, recent games), **Player** (KDA, win rate,
+champion pool, game log), and **Draft** (pick/ban tables). Filtering is keyed on
+`overviewpage` because Cargo leaves `ScoreboardPlayers.tournament` empty.
 
 ### Oracle's Elixir notes
 

@@ -32,17 +32,26 @@ def _client() -> LeaguepediaClient:
     return LeaguepediaClient(LEAGUEPEDIA.username, LEAGUEPEDIA.password)
 
 
-def ingest_tournament(name: str) -> None:
-    api = _client()
-    print(f"Fetching tournament metadata for '{name}'...")
+def ingest_tournament_steps(name: str, client: LeaguepediaClient | None = None):
+    """Ingest a tournament step by step, yielding (label, rows_loaded).
+
+    Shared by the CLI and the dashboard so both use one code path. The first
+    yield carries the tournament-metadata count; if it's 0 the Name matched no
+    tournament (caller can warn). Games/players follow.
+    """
+    api = client or _client()
     safe = name.replace("'", "''")
-    upsert_dataframe(api.tournaments(where=f"T.Name = '{safe}'"), "Tournaments")
+    n_t = upsert_dataframe(api.tournaments(where=f"T.Name = '{safe}'"), "Tournaments")
+    yield "Tournament metadata", n_t
+    if n_t == 0:
+        return  # name didn't match a tournament; nothing else to fetch
+    yield "Games", upsert_dataframe(api.games_for_tournament(name), "ScoreboardGames")
+    yield "Players", upsert_dataframe(api.players_for_tournament(name), "ScoreboardPlayers")
 
-    print("Fetching games...")
-    upsert_dataframe(api.games_for_tournament(name), "ScoreboardGames")
 
-    print("Fetching players...")
-    upsert_dataframe(api.players_for_tournament(name), "ScoreboardPlayers")
+def ingest_tournament(name: str) -> None:
+    for label, rows in ingest_tournament_steps(name):
+        print(f"  {label}: {rows} rows")
 
 
 def ingest_team(name: str) -> None:

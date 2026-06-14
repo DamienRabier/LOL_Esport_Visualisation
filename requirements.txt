@@ -14,6 +14,10 @@ gdown>=5.1
 # Config
 python-dotenv>=1.0
 
+# Visualization dashboard
+streamlit>=1.36
+plotly>=5.22
+
 # Notebooks / analysis (optional, used later for debrief & scouting)
 # NOTE: full JupyterLab is intentionally NOT pinned here — its bundled files
 # overflow Windows' 260-char path limit unless long paths are enabled (admin).

@@ -154,6 +154,19 @@ class LeaguepediaClient:
     def current_leagues(self, **kwargs) -> pd.DataFrame:
         return self.query("CurrentLeagues=CL", F.CURRENT_LEAGUES, **kwargs)
 
+    def list_tournaments(self, **kwargs) -> pd.DataFrame:
+        """All tournaments with light metadata, newest first.
+
+        Used to build the dashboard's autocomplete catalog. Paginates through
+        the whole Tournaments table (no heavy fields, so it's quick).
+        """
+        return self.query(
+            "Tournaments=T",
+            ["Name", "Year", "Region", "League", "DateStart", "OverviewPage"],
+            order_by="T.DateStart DESC",
+            **kwargs,
+        )
+
     # ------------------------------------------------------ scouting helpers
     def overview_pages_for(self, tournament: str) -> list[str]:
         """Resolve a tournament Name (e.g. 'MSI 2025') to its OverviewPage(s).
