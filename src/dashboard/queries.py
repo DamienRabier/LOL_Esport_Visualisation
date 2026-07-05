@@ -117,7 +117,14 @@ def team_champion_pool(engine: Engine, team: str, overview: str | None) -> pd.Da
 
 def team_bans(engine: Engine, team: str, overview: str | None) -> pd.DataFrame:
     sql = """
-        SELECT champ AS champion, count(*) AS bans FROM (
+        WITH g AS (
+            SELECT count(*) AS games FROM scoreboardgames
+            WHERE (team1=:team OR team2=:team) AND (:op IS NULL OR overviewpage = :op)
+        )
+        SELECT champ AS champion, count(*) AS bans,
+               (SELECT games FROM g) AS games,
+               round(100.0*count(*) / NULLIF((SELECT games FROM g),0), 1) AS banrate_pct
+        FROM (
             SELECT unnest(team1bans) AS champ FROM scoreboardgames
               WHERE team1=:team AND (:op IS NULL OR overviewpage = :op)
             UNION ALL
@@ -163,6 +170,7 @@ def player_summary(engine: Engine, name: str, overview: str | None) -> dict:
 def player_champions(engine: Engine, name: str, overview: str | None) -> pd.DataFrame:
     sql = """
         SELECT champion, count(*) AS games,
+               sum(CASE WHEN playerwin='Yes' THEN 1 ELSE 0 END) AS wins,
                round(100.0*sum(CASE WHEN playerwin='Yes' THEN 1 ELSE 0 END)/count(*),1) AS winrate_pct,
                round((sum(kills)+sum(assists))::numeric / NULLIF(sum(deaths),0),2) AS kda
         FROM scoreboardplayers
@@ -184,10 +192,49 @@ def player_games(engine: Engine, name: str, overview: str | None) -> pd.DataFram
     return _df(engine, sql, name=name, op=overview)
 
 
+# --------------------------------------------------------------- game by game
+def games_list(engine: Engine, overview: str | None) -> pd.DataFrame:
+    """All games of a tournament, newest first, with a display label + gameid."""
+    sql = """
+        SELECT gameid,
+               datetime_utc AS date,
+               team1, team2, team1score, team2score,
+               CASE WHEN winner=1 THEN team1 WHEN winner=2 THEN team2 END AS winner,
+               gamelength AS length, patch
+        FROM scoreboardgames
+        WHERE (:op IS NULL OR overviewpage = :op) AND gameid IS NOT NULL
+        ORDER BY datetime_utc DESC NULLS LAST
+    """
+    return _df(engine, sql, op=overview)
+
+
+def game_detail(engine: Engine, gameid: str) -> dict:
+    """Single game's team-level row (objectives, gold, kills, bans, picks)."""
+    sql = "SELECT * FROM scoreboardgames WHERE gameid = :gid"
+    df = _df(engine, sql, gid=gameid)
+    return df.iloc[0].to_dict() if not df.empty else {}
+
+
+def game_players(engine: Engine, gameid: str) -> pd.DataFrame:
+    """Per-player scoreboard for a single game, ordered by side then role."""
+    sql = """
+        SELECT side, team, role, name, champion,
+               kills, deaths, assists,
+               round((kills+assists)::numeric / NULLIF(deaths,0), 2) AS kda,
+               cs, gold, damagetochampions AS dmg, visionscore AS vision,
+               playerwin AS win
+        FROM scoreboardplayers
+        WHERE gameid = :gid
+        ORDER BY side, role_number
+    """
+    return _df(engine, sql, gid=gameid)
+
+
 # ------------------------------------------------------------------- draft
 def top_picks(engine: Engine, overview: str | None) -> pd.DataFrame:
     sql = """
         SELECT champion, count(*) AS picks,
+               sum(CASE WHEN playerwin='Yes' THEN 1 ELSE 0 END) AS wins,
                round(100.0*sum(CASE WHEN playerwin='Yes' THEN 1 ELSE 0 END)/count(*),1) AS winrate_pct
         FROM scoreboardplayers
         WHERE (:op IS NULL OR overviewpage = :op) AND champion <> ''
@@ -198,7 +245,14 @@ def top_picks(engine: Engine, overview: str | None) -> pd.DataFrame:
 
 def top_bans(engine: Engine, overview: str | None) -> pd.DataFrame:
     sql = """
-        SELECT champ AS champion, count(*) AS bans FROM (
+        WITH g AS (
+            SELECT count(*) AS games FROM scoreboardgames
+            WHERE (:op IS NULL OR overviewpage = :op)
+        )
+        SELECT champ AS champion, count(*) AS bans,
+               (SELECT games FROM g) AS games,
+               round(100.0*count(*) / NULLIF((SELECT games FROM g),0), 1) AS banrate_pct
+        FROM (
             SELECT unnest(team1bans) AS champ FROM scoreboardgames WHERE (:op IS NULL OR overviewpage = :op)
             UNION ALL
             SELECT unnest(team2bans) FROM scoreboardgames WHERE (:op IS NULL OR overviewpage = :op)

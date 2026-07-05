@@ -28,9 +28,20 @@ def load_catalog(engine: Engine) -> pd.DataFrame:
         )
 
 
-def refresh_catalog(client: LeaguepediaClient, engine: Engine) -> int:
-    """Fetch every tournament from Leaguepedia and (re)build the catalog table."""
-    df = client.list_tournaments()
+def refresh_catalog(
+    client: LeaguepediaClient,
+    engine: Engine,
+    *,
+    where: str | None = None,
+    limit: int | None = None,
+) -> int:
+    """Fetch tournaments from Leaguepedia and (re)build the catalog table.
+
+    By default pulls every tournament (slow, heavily rate-limited). Pass
+    ``where`` (e.g. ``"T.Year >= 2024"``) and/or ``limit`` to fetch only a
+    recent subset in a single fast request.
+    """
+    df = client.list_tournaments(where=where, limit=limit)
     keep = [c for c in ["Name", "Year", "Region", "League", "DateStart", "OverviewPage"]
             if c in df.columns]
     df = df[keep].copy()
