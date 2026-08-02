@@ -71,6 +71,48 @@ def overview_kpis(engine: Engine, overview: str | None) -> dict:
     return row
 
 
+# ------------------------------------------------------- teams leaderboard
+def teams_leaderboard(engine: Engine, overview: str | None) -> pd.DataFrame:
+    """Per-team aggregates for a tournament: record, side win-rates, objectives."""
+    sql = """
+        SELECT team,
+               count(*) AS games,
+               sum(win) AS wins,
+               sum(side) AS blue_games,
+               sum(win * side) AS blue_wins,
+               round(avg(kills)::numeric, 1)   AS avg_kills,
+               round(avg(dragons)::numeric, 2) AS dragons,
+               round(avg(barons)::numeric, 2)  AS barons,
+               round(avg(towers)::numeric, 1)  AS towers
+        FROM (
+            SELECT team1 AS team,
+                   CASE WHEN winner = 1 THEN 1 ELSE 0 END AS win, 1 AS side,
+                   team1kills AS kills, team1dragons AS dragons,
+                   team1barons AS barons, team1towers AS towers
+            FROM scoreboardgames
+            WHERE (:op IS NULL OR overviewpage = :op) AND team1 IS NOT NULL AND team1 <> ''
+            UNION ALL
+            SELECT team2, CASE WHEN winner = 2 THEN 1 ELSE 0 END, 0,
+                   team2kills, team2dragons, team2barons, team2towers
+            FROM scoreboardgames
+            WHERE (:op IS NULL OR overviewpage = :op) AND team2 IS NOT NULL AND team2 <> ''
+        ) x
+        GROUP BY team
+    """
+    df = _df(engine, sql, op=overview)
+    if df.empty:
+        return df
+    df["losses"] = df["games"] - df["wins"]
+    df["winrate"] = (100 * df["wins"] / df["games"]).round(0)
+    df["red_games"] = df["games"] - df["blue_games"]
+    df["red_wins"] = df["wins"] - df["blue_wins"]
+    df["blue_wr"] = (100 * df["blue_wins"] / df["blue_games"].where(df["blue_games"] != 0)).round(0)
+    df["red_wr"] = (100 * df["red_wins"] / df["red_games"].where(df["red_games"] != 0)).round(0)
+    df = df.sort_values(["winrate", "games"], ascending=[False, False])
+    return df[["team", "games", "wins", "losses", "winrate", "blue_wr", "red_wr",
+               "avg_kills", "dragons", "barons", "towers"]]
+
+
 # ----------------------------------------------------------- team scouting
 def team_record(engine: Engine, team: str, overview: str | None) -> dict:
     sql = """
@@ -138,7 +180,7 @@ def team_bans(engine: Engine, team: str, overview: str | None) -> pd.DataFrame:
 
 def team_games(engine: Engine, team: str, overview: str | None) -> pd.DataFrame:
     sql = """
-        SELECT datetime_utc AS date, team1, team2,
+        SELECT gameid, datetime_utc AS date, team1, team2,
                CASE WHEN winner=1 THEN team1 WHEN winner=2 THEN team2 END AS winner,
                patch, gamelength AS length
         FROM scoreboardgames
@@ -146,6 +188,64 @@ def team_games(engine: Engine, team: str, overview: str | None) -> pd.DataFrame:
         ORDER BY datetime_utc DESC
     """
     return _df(engine, sql, team=team, op=overview)
+
+
+def top_players_kda(engine: Engine, overview: str | None, limit: int = 3,
+                    min_games: int = 3) -> pd.DataFrame:
+    """Top players by KDA in a tournament (0 deaths counts as 1 for the ratio)."""
+    sql = """
+        SELECT name AS player, team, count(*) AS games,
+               sum(kills) AS k, sum(deaths) AS d, sum(assists) AS a,
+               round((sum(kills) + sum(assists))::numeric / GREATEST(sum(deaths), 1), 2) AS kda
+        FROM scoreboardplayers
+        WHERE (:op IS NULL OR overviewpage = :op) AND name IS NOT NULL AND name <> ''
+        GROUP BY name, team
+        HAVING count(*) >= :mg
+        ORDER BY kda DESC
+        LIMIT :lim
+    """
+    return _df(engine, sql, op=overview, mg=min_games, lim=limit)
+
+
+def players_leaderboard(engine: Engine, overview: str | None) -> pd.DataFrame:
+    """Per-player aggregates for a tournament: KDA, win%, CS, DPM."""
+    sql = """
+        SELECT sp.name AS player, sp.team AS team, min(sp.role) AS role,
+               count(*) AS games,
+               sum(sp.kills) AS k, sum(sp.deaths) AS d, sum(sp.assists) AS a,
+               round((sum(sp.kills) + sum(sp.assists))::numeric
+                     / GREATEST(sum(sp.deaths), 1), 2) AS kda,
+               round(100.0 * sum(CASE WHEN sp.playerwin = 'Yes' THEN 1 ELSE 0 END)
+                     / count(*), 0) AS winrate,
+               round(avg(sp.cs)::numeric, 0) AS cs,
+               round((sum(sp.damagetochampions)
+                      / NULLIF(sum(sg.gamelength_number), 0))::numeric, 0) AS dpm
+        FROM scoreboardplayers sp
+        JOIN scoreboardgames sg ON sg.gameid = sp.gameid
+        WHERE (:op IS NULL OR sp.overviewpage = :op)
+          AND sp.name IS NOT NULL AND sp.name <> ''
+        GROUP BY sp.name, sp.team
+        ORDER BY kda DESC
+    """
+    return _df(engine, sql, op=overview)
+
+
+def top_players_dpm(engine: Engine, overview: str | None, limit: int = 3,
+                    min_games: int = 3) -> pd.DataFrame:
+    """Top players by damage per minute (dmg to champions / game length)."""
+    sql = """
+        SELECT sp.name AS player, sp.team AS team, count(*) AS games,
+               round((sum(sp.damagetochampions)
+                      / NULLIF(sum(sg.gamelength_number), 0))::numeric, 0) AS dpm
+        FROM scoreboardplayers sp
+        JOIN scoreboardgames sg ON sg.gameid = sp.gameid
+        WHERE (:op IS NULL OR sp.overviewpage = :op) AND sp.name IS NOT NULL AND sp.name <> ''
+        GROUP BY sp.name, sp.team
+        HAVING count(*) >= :mg AND sum(sg.gamelength_number) > 0
+        ORDER BY dpm DESC
+        LIMIT :lim
+    """
+    return _df(engine, sql, op=overview, mg=min_games, lim=limit)
 
 
 # ----------------------------------------------------------------- players

@@ -14,7 +14,11 @@ gdown>=5.1
 # Config
 python-dotenv>=1.0
 
-# Visualization dashboard
+# Web API backend (React SPA talks to this)
+fastapi>=0.115
+uvicorn[standard]>=0.30
+
+# Legacy Streamlit dashboard (kept during the migration; see app.py)
 streamlit>=1.36
 plotly>=5.22
 
