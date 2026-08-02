@@ -16,6 +16,11 @@ data/
 *.csv
 *.parquet
 
+# Node / frontend build
+node_modules/
+frontend/dist/
+frontend/.vite/
+
 # OS / editors
 .DS_Store
 .idea/
