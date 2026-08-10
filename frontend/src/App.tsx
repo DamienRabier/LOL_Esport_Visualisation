@@ -12,6 +12,7 @@ import RefreshStatus from "./components/RefreshStatus";
 import RefreshOverlay from "./components/RefreshOverlay";
 import ErrorBoundary from "./components/ErrorBoundary";
 import OeRefreshButton from "./components/OeRefreshButton";
+import TournamentPicker from "./components/TournamentPicker";
 
 const NAV = [
   { to: "/", label: "📊 Overview", end: true },
@@ -24,7 +25,7 @@ const NAV = [
 ];
 
 export default function App() {
-  const { tournaments, selected, setSelected, loading, error } = useTournaments();
+  const { tournaments, loading, error } = useTournaments();
 
   return (
     <div className="app">
@@ -32,23 +33,7 @@ export default function App() {
       <aside className="sidebar">
         <div className="brand">🎮 LoL Esport</div>
 
-        <label className="field-label">Tournament</label>
-        <select
-          className="select full"
-          value={selected?.overviewpage ?? ""}
-          onChange={(e) => {
-            const t = tournaments.find((x) => x.overviewpage === e.target.value);
-            if (t) setSelected(t);
-          }}
-          disabled={!tournaments.length}
-        >
-          {tournaments.length === 0 && <option>{loading ? "Loading…" : "No data yet"}</option>}
-          {tournaments.map((t) => (
-            <option key={t.overviewpage} value={t.overviewpage}>
-              {t.name}
-            </option>
-          ))}
-        </select>
+        <TournamentPicker />
 
         <nav>
           {NAV.map((n) => (

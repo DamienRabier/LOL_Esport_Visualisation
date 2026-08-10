@@ -15,6 +15,8 @@ import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
+from src.dashboard.queries import _ops
+
 ROLES = ["top", "jng", "mid", "bot", "sup"]
 ROLE_LABELS = {"top": "Top", "jng": "Jungle", "mid": "Mid", "bot": "Bot", "sup": "Support"}
 
@@ -38,10 +40,10 @@ def attach_players_gd15(engine: Engine, df: pd.DataFrame, overview: str | None,
          AND substring(oe.date FROM 1 FOR 10) = to_char(sp.datetime_utc, 'YYYY-MM-DD')
          AND oe.position IN ('top','jng','mid','bot','sup')
          AND oe.datacompleteness = 'complete' AND oe.golddiffat15 IS NOT NULL
-        WHERE (:op IS NULL OR sp.overviewpage = :op) AND sp.name <> ''
+        WHERE (CAST(:ops AS text[]) IS NULL OR sp.overviewpage = ANY(CAST(:ops AS text[]))) AND sp.name <> ''
         GROUP BY sp.name
     """
-    m = {str(r.player).strip().lower(): r.gd15 for r in _df(engine, sql, op=overview).itertuples()}
+    m = {str(r.player).strip().lower(): r.gd15 for r in _df(engine, sql, ops=_ops(overview)).itertuples()}
     out = df.copy()
     out["GD@15"] = [m.get(str(p).strip().lower()) for p in out[player_col]]
     return out
@@ -64,13 +66,13 @@ def top_players_gd15(engine: Engine, overview: str | None, limit: int = 3,
          AND substring(oe.date FROM 1 FOR 10) = to_char(sp.datetime_utc, 'YYYY-MM-DD')
          AND oe.position IN ('top','jng','mid','bot','sup')
          AND oe.datacompleteness = 'complete' AND oe.golddiffat15 IS NOT NULL
-        WHERE (:op IS NULL OR sp.overviewpage = :op) AND sp.name <> ''
+        WHERE (CAST(:ops AS text[]) IS NULL OR sp.overviewpage = ANY(CAST(:ops AS text[]))) AND sp.name <> ''
         GROUP BY sp.name, sp.team
         HAVING count(*) >= :mg
         ORDER BY gd15 DESC
         LIMIT :lim
     """
-    return _df(engine, sql, op=overview, mg=min_games, lim=limit)
+    return _df(engine, sql, ops=_ops(overview), mg=min_games, lim=limit)
 
 
 def oe_team_profile(engine: Engine, team: str, year: str) -> pd.DataFrame:

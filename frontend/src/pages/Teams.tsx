@@ -18,6 +18,8 @@ const COLS: Col[] = [
   { key: "games", label: "G" },
   { key: "record", label: "W-L" },
   { key: "winrate", label: "Win%", pct: true },
+  { key: "bo_record", label: "BO W-L" },
+  { key: "bo_winrate", label: "BO%", pct: true },
   { key: "blue_wr", label: "Blue%", pct: true },
   { key: "red_wr", label: "Red%", pct: true },
   { key: "avg_kills", label: "Avg K" },

@@ -85,6 +85,10 @@ body {
   font-weight: 600;
   margin-bottom: 3px;
 }
+.picker { display: flex; flex-direction: column; gap: 3px; }
+.picker .field-label { margin-top: 8px; }
+.picker .field-label:first-child { margin-top: 0; }
+
 .sidebar nav { display: flex; flex-direction: column; gap: 3px; margin-top: 20px; }
 .sidebar-spacer { flex: 1; }
 

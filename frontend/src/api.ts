@@ -38,6 +38,9 @@ export const api = {
   games: (op: string) => getJSON<Row[]>(`/api/games?op=${enc(op)}`),
   game: (gameid: string) =>
     getJSON<{ detail: Row; players: Row[] }>(`/api/game?gameid=${enc(gameid)}`),
+  matches: (op: string) => getJSON<Row[]>(`/api/matches?op=${enc(op)}`),
+  match: (matchid: string) =>
+    getJSON<{ games: Row[]; players: Row[] }>(`/api/match?matchid=${enc(matchid)}`),
 
   teams: (op: string) => getJSON<string[]>(`/api/teams?op=${enc(op)}`),
   teamsLeaderboard: (op: string, year?: string) =>

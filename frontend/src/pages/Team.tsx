@@ -58,7 +58,14 @@ function TeamDetail({ team, op, year }: { team: string; op: string; year: string
   return (
     <>
       <div className="metric-row">
-        <Metric label="Record" value={`${r.wins}-${r.games - r.wins}`} sub={pct(r.wins, r.games)} />
+        <Metric label="Record (games)" value={`${r.wins}-${r.games - r.wins}`} sub={pct(r.wins, r.games)} />
+        {r.bo_games != null && (
+          <Metric
+            label="Record (BO)"
+            value={`${r.bo_wins}-${r.bo_games - r.bo_wins}`}
+            sub={`${r.bo_winrate}%`}
+          />
+        )}
         <Metric label="Blue side" value={`${r.blue_wins}/${r.blue_games}`} sub={pct(r.blue_wins, r.blue_games)} />
         <Metric label="Red side" value={`${r.red_wins}/${r.red_games}`} sub={pct(r.red_wins, r.red_games)} />
         <Metric label="Avg kills" value={o.kills} />

@@ -232,6 +232,19 @@ def games(op: str | None = None) -> list[dict]:
     return _records(q.games_list(_engine, op))
 
 
+@app.get("/api/matches")
+def matches(op: str | None = None) -> list[dict]:
+    return _records(q.matches_list(_engine, op))
+
+
+@app.get("/api/match")
+def match(matchid: str = Query(...)) -> dict:
+    return {
+        "games": _records(q.match_games(_engine, matchid)),
+        "players": _records(q.match_players(_engine, matchid)),
+    }
+
+
 @app.get("/api/game")
 def game(gameid: str = Query(...)) -> dict:
     # gameid contains slashes (e.g. "LCK/2026 Season/..."), so it's a query
@@ -261,8 +274,16 @@ def team(name: str = Query(...), op: str | None = None, year: str | None = None)
             games = oeq.attach_team_games(_engine, games, name, year)
         except Exception:
             pass
+    record = q.team_record(_engine, name, op)
+    bo = q.team_bo_records(_engine, op)
+    bo_row = bo[bo["team"] == name]
+    if not bo_row.empty:
+        r = bo_row.iloc[0]
+        record["bo_games"] = r["bo_games"]
+        record["bo_wins"] = r["bo_wins"]
+        record["bo_winrate"] = r["bo_winrate"]
     return {
-        "record": _row(q.team_record(_engine, name, op)),
+        "record": _row(record),
         "objectives": _row(q.team_objectives(_engine, name, op)),
         "champion_pool": _records(pool),
         "bans": _records(q.team_bans(_engine, name, op)),
