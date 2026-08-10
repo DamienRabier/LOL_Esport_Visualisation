@@ -151,6 +151,7 @@ def refresh_tracked(
 
     # 4) Ingest the rest (idempotent upserts).
     for i, name in enumerate(to_ingest, 1):
+        emit(stage="tournament_start", name=name, index=i, total=len(to_ingest))
         try:
             counts_i: dict[str, int] = {}
             for label, rows in ingest_tournament_steps(name, client=client):

@@ -105,6 +105,7 @@ export interface RefreshStatus {
   running: boolean;
   started_at: string | null;
   finished_at: string | null;
+  phase: string | null;
   total: number;
   skipped: number;
   current: { name: string; index: number; total: number } | null;

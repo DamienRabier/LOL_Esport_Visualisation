@@ -173,6 +173,7 @@ body {
 .overlay-head { display: flex; align-items: center; gap: 16px; }
 .overlay-head h2 { font-size: 22px; }
 .overlay-head p { margin: 2px 0 0; font-size: 13px; }
+.overlay-timer { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 700; color: var(--muted); font-size: 15px; align-self: flex-start; }
 
 .progress { height: 10px; background: var(--bg-2); border-radius: 999px; overflow: hidden; border: 1px solid var(--border-soft); }
 .progress-bar { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius: 999px; transition: width 0.4s ease; }
