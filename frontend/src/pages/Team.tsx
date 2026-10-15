@@ -5,7 +5,18 @@ import { useAsync } from "../hooks";
 import { useTournaments } from "../store";
 import RateBar, { BAN_BLUE } from "../components/RateBar";
 import DiffBar from "../components/DiffBar";
+import TrendChart, { type TrendMetric } from "../components/TrendChart";
 import { DataTable, Loader, Metric } from "../components/ui";
+
+const TEAM_METRICS: TrendMetric[] = [
+  { key: "GD@15", label: "Gold diff @ 15" },
+  { key: "kills", label: "Kills" },
+  { key: "gold", label: "Gold" },
+  { key: "dragons", label: "Dragons" },
+  { key: "barons", label: "Barons" },
+  { key: "towers", label: "Towers" },
+  { key: "win", label: "Win (0/1)" },
+];
 
 const pct = (w: number, g: number) => (g ? `${Math.round((100 * w) / g)}%` : "—");
 
@@ -98,6 +109,21 @@ function TeamDetail({ team, op, year }: { team: string; op: string; year: string
           sortKey="bans"
         />
       </div>
+      {data.trend && data.trend.length > 1 && (
+        <>
+          <h3>Trends (per game)</h3>
+          <TrendChart
+            title="Metric over games"
+            rows={data.trend}
+            metrics={TEAM_METRICS}
+            labelOf={(r) => {
+              const d = r.date ? String(r.date).slice(0, 10) : "";
+              return `Game ${r.game_in_match} Bo${r.bo} vs ${r.opponent} · ${d}`;
+            }}
+          />
+        </>
+      )}
+
       <h3>Recent games</h3>
       <DataTable
         rows={data.games}

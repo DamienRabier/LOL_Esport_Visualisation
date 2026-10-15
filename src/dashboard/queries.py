@@ -232,6 +232,28 @@ def team_bans(engine: Engine, team: str, overview: str | None) -> pd.DataFrame:
     return _df(engine, sql, team=team, ops=_ops(overview))
 
 
+def team_game_stats(engine: Engine, team: str, overview: str | None) -> pd.DataFrame:
+    """A team's per-game stats over time (oldest first) for trend charts."""
+    sql = """
+        SELECT gameid, datetime_utc AS date, team1, team2,
+               CASE WHEN team1=:team THEN team2 ELSE team1 END AS opponent,
+               n_gameinmatch AS game_in_match,
+               (2 * max(GREATEST(team1score, team2score)) OVER (PARTITION BY matchid) - 1) AS bo,
+               CASE WHEN team1=:team THEN team1kills   ELSE team2kills   END AS kills,
+               CASE WHEN team1=:team THEN team1gold    ELSE team2gold    END AS gold,
+               CASE WHEN team1=:team THEN team1dragons ELSE team2dragons END AS dragons,
+               CASE WHEN team1=:team THEN team1barons  ELSE team2barons  END AS barons,
+               CASE WHEN team1=:team THEN team1towers  ELSE team2towers  END AS towers,
+               CASE WHEN (team1=:team AND winner=1) OR (team2=:team AND winner=2)
+                    THEN 1 ELSE 0 END AS win
+        FROM scoreboardgames
+        WHERE (team1=:team OR team2=:team)
+          AND (CAST(:ops AS text[]) IS NULL OR overviewpage = ANY(CAST(:ops AS text[])))
+        ORDER BY datetime_utc NULLS LAST
+    """
+    return _df(engine, sql, team=team, ops=_ops(overview))
+
+
 def team_games(engine: Engine, team: str, overview: str | None) -> pd.DataFrame:
     sql = """
         SELECT gameid, datetime_utc AS date, team1, team2,
@@ -336,12 +358,18 @@ def player_champions(engine: Engine, name: str, overview: str | None) -> pd.Data
 
 def player_games(engine: Engine, name: str, overview: str | None) -> pd.DataFrame:
     sql = """
-        SELECT datetime_utc AS date, team, champion, role,
-               kills, deaths, assists, cs, gold, damagetochampions AS dmg,
-               visionscore AS vision, playerwin AS win
-        FROM scoreboardplayers
-        WHERE name=:name AND (CAST(:ops AS text[]) IS NULL OR overviewpage = ANY(CAST(:ops AS text[])))
-        ORDER BY datetime_utc DESC
+        SELECT sp.datetime_utc AS date, sp.team, sp.teamvs AS opponent,
+               sp.champion, sp.role,
+               sp.kills, sp.deaths, sp.assists, sp.cs, sp.gold,
+               sp.damagetochampions AS dmg, sp.visionscore AS vision, sp.playerwin AS win,
+               sg.n_gameinmatch AS game_in_match,
+               (2 * max(GREATEST(sg.team1score, sg.team2score))
+                    OVER (PARTITION BY sg.matchid) - 1) AS bo
+        FROM scoreboardplayers sp
+        JOIN scoreboardgames sg ON sg.gameid = sp.gameid
+        WHERE sp.name=:name
+          AND (CAST(:ops AS text[]) IS NULL OR sp.overviewpage = ANY(CAST(:ops AS text[])))
+        ORDER BY sp.datetime_utc DESC
     """
     return _df(engine, sql, name=name, ops=_ops(overview))
 

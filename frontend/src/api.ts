@@ -52,6 +52,7 @@ export const api = {
       champion_pool: Row[];
       bans: Row[];
       games: Row[];
+      trend: Row[];
     }>(`/api/team?name=${enc(name)}&op=${enc(op)}${year ? `&year=${enc(year)}` : ""}`),
 
   players: (op: string, team?: string) =>

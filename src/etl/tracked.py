@@ -34,6 +34,9 @@ TRACKED_LEAGUES = [
     "League of Legends Championship of The Americas",         # LTA (combined)
     "League of Legends Championship of The Americas North",   # LTA North
     "League of Legends Championship of The Americas South",   # LTA South
+    "League of Legends Championship Pacific",                 # LCP
+    "Circuit Brazilian League of Legends",                   # CBLOL
+    "Americas Cup",                                           # Americas Cup
     "LCK Challengers League",                                 # LCK CL (Challengers)
     "First Stand",                                            # First Stand
     "Mid-Season Invitational",                               # MSI

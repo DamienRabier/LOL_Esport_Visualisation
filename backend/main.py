@@ -268,10 +268,12 @@ def game(gameid: str = Query(...)) -> dict:
 def team(name: str = Query(...), op: str | None = None, year: str | None = None) -> dict:
     pool = q.team_champion_pool(_engine, name, op)
     games = q.team_games(_engine, name, op)
+    trend = q.team_game_stats(_engine, name, op)
     if year:
         try:
             pool = oeq.attach_champion_gd15(_engine, pool, year)
             games = oeq.attach_team_games(_engine, games, name, year)
+            trend = oeq.attach_team_games(_engine, trend, name, year)
         except Exception:
             pass
     record = q.team_record(_engine, name, op)
@@ -288,6 +290,7 @@ def team(name: str = Query(...), op: str | None = None, year: str | None = None)
         "champion_pool": _records(pool),
         "bans": _records(q.team_bans(_engine, name, op)),
         "games": _records(games),
+        "trend": _records(trend),
     }
 
 
