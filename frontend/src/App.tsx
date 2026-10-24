@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
 import { useTournaments } from "./store";
+import Landing from "./pages/Landing";
 import Overview from "./pages/Overview";
 import Games from "./pages/Games";
 import Team from "./pages/Team";
@@ -13,6 +15,7 @@ import RefreshOverlay from "./components/RefreshOverlay";
 import ErrorBoundary from "./components/ErrorBoundary";
 import OeRefreshButton from "./components/OeRefreshButton";
 import TournamentPicker from "./components/TournamentPicker";
+import SceneBackground from "./components/SceneBackground";
 
 const NAV = [
   { to: "/", label: "📊 Overview", end: true },
@@ -24,14 +27,53 @@ const NAV = [
   { to: "/draft", label: "🚫 Draft" },
 ];
 
+function readEntered(): boolean {
+  try {
+    return sessionStorage.getItem("entered") === "1";
+  } catch {
+    return false;
+  }
+}
+
 export default function App() {
   const { tournaments, loading, error } = useTournaments();
+  const [entered, setEntered] = useState(readEntered);
+
+  const enter = () => {
+    try {
+      sessionStorage.setItem("entered", "1");
+    } catch {
+      /* private mode — fine, we keep the in-memory flag */
+    }
+    setEntered(true);
+  };
+
+  const goHome = () => {
+    try {
+      sessionStorage.removeItem("entered");
+    } catch {
+      /* ignore */
+    }
+    setEntered(false);
+  };
+
+  if (!entered) {
+    return (
+      <div className="app">
+        <SceneBackground />
+        <Landing onEnter={enter} />
+      </div>
+    );
+  }
 
   return (
     <div className="app">
+      <SceneBackground />
       <RefreshOverlay />
       <aside className="sidebar">
-        <div className="brand">🎮 LoL Esport</div>
+        <button className="brand" onClick={goHome} title="Back to home" type="button">
+          🎮 LoL Esport
+        </button>
 
         <TournamentPicker />
 
