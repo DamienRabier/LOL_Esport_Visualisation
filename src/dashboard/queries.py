@@ -20,6 +20,21 @@ def _df(engine: Engine, sql: str, **params) -> pd.DataFrame:
         return pd.read_sql(text(sql), conn, params=params)
 
 
+def _ops(overview) -> list[str] | None:
+    """Normalise a scope into a list of overviewpages, or None for 'all data'.
+
+    Accepts a single overviewpage, or several joined by newlines (the "All
+    splits" aggregation passes every split's overviewpage in one string).
+    """
+    if not overview:
+        return None
+    if isinstance(overview, (list, tuple)):
+        parts = [str(o) for o in overview if o]
+    else:
+        parts = [p for p in str(overview).split("\n") if p]
+    return parts or None
+
+
 # ----------------------------------------------------------------- filters
 def tournaments(engine: Engine) -> pd.DataFrame:
     """Return distinct tournaments as (name, overviewpage), newest first."""
@@ -36,23 +51,23 @@ def tournaments(engine: Engine) -> pd.DataFrame:
 def teams(engine: Engine, overview: str | None) -> list[str]:
     sql = """
         SELECT team FROM (
-            SELECT team1 AS team FROM scoreboardgames WHERE (:op IS NULL OR overviewpage = :op)
+            SELECT team1 AS team FROM scoreboardgames WHERE (CAST(:ops AS text[]) IS NULL OR overviewpage = ANY(CAST(:ops AS text[])))
             UNION
-            SELECT team2 FROM scoreboardgames WHERE (:op IS NULL OR overviewpage = :op)
+            SELECT team2 FROM scoreboardgames WHERE (CAST(:ops AS text[]) IS NULL OR overviewpage = ANY(CAST(:ops AS text[])))
         ) s WHERE team IS NOT NULL AND team <> '' ORDER BY team
     """
-    return _df(engine, sql, op=overview)["team"].tolist()
+    return _df(engine, sql, ops=_ops(overview))["team"].tolist()
 
 
 def players(engine: Engine, overview: str | None, team: str | None) -> list[str]:
     sql = """
         SELECT DISTINCT name FROM scoreboardplayers
         WHERE name IS NOT NULL AND name <> ''
-          AND (:op IS NULL OR overviewpage = :op)
+          AND (CAST(:ops AS text[]) IS NULL OR overviewpage = ANY(CAST(:ops AS text[])))
           AND (:team IS NULL OR team = :team)
         ORDER BY name
     """
-    return _df(engine, sql, op=overview, team=team)["name"].tolist()
+    return _df(engine, sql, ops=_ops(overview), team=team)["name"].tolist()
 
 
 # ---------------------------------------------------------------- overview
@@ -64,14 +79,41 @@ def overview_kpis(engine: Engine, overview: str | None) -> dict:
                min(datetime_utc) AS first_game,
                max(datetime_utc) AS last_game,
                round(avg(gamelength_number)::numeric, 1) AS avg_len_min
-        FROM scoreboardgames WHERE (:op IS NULL OR overviewpage = :op)
+        FROM scoreboardgames WHERE (CAST(:ops AS text[]) IS NULL OR overviewpage = ANY(CAST(:ops AS text[])))
     """
-    row = _df(engine, sql, op=overview).iloc[0].to_dict()
+    row = _df(engine, sql, ops=_ops(overview)).iloc[0].to_dict()
     row["teams"] = len(teams(engine, overview))
     return row
 
 
 # ------------------------------------------------------- teams leaderboard
+def team_bo_records(engine: Engine, overview: str | None) -> pd.DataFrame:
+    """Per-team series (BO) record: series played/won and win% at the BO level."""
+    sql = """
+        WITH last_game AS (
+            SELECT DISTINCT ON (matchid) matchid, team1, team2,
+                   team1score AS t1, team2score AS t2
+            FROM scoreboardgames
+            WHERE (CAST(:ops AS text[]) IS NULL OR overviewpage = ANY(CAST(:ops AS text[]))) AND matchid IS NOT NULL AND matchid <> ''
+            ORDER BY matchid, n_gameinmatch DESC NULLS LAST, datetime_utc DESC
+        ),
+        m AS (
+            SELECT team1, team2, CASE WHEN t1 > t2 THEN team1 ELSE team2 END AS winner
+            FROM last_game
+        ),
+        per_team AS (
+            SELECT team1 AS team, CASE WHEN winner = team1 THEN 1 ELSE 0 END AS win FROM m
+            UNION ALL
+            SELECT team2, CASE WHEN winner = team2 THEN 1 ELSE 0 END FROM m
+        )
+        SELECT team, count(*) AS bo_games, sum(win) AS bo_wins,
+               round(100.0 * sum(win) / count(*), 0) AS bo_winrate
+        FROM per_team WHERE team IS NOT NULL AND team <> ''
+        GROUP BY team
+    """
+    return _df(engine, sql, ops=_ops(overview))
+
+
 def teams_leaderboard(engine: Engine, overview: str | None) -> pd.DataFrame:
     """Per-team aggregates for a tournament: record, side win-rates, objectives."""
     sql = """
@@ -90,16 +132,16 @@ def teams_leaderboard(engine: Engine, overview: str | None) -> pd.DataFrame:
                    team1kills AS kills, team1dragons AS dragons,
                    team1barons AS barons, team1towers AS towers
             FROM scoreboardgames
-            WHERE (:op IS NULL OR overviewpage = :op) AND team1 IS NOT NULL AND team1 <> ''
+            WHERE (CAST(:ops AS text[]) IS NULL OR overviewpage = ANY(CAST(:ops AS text[]))) AND team1 IS NOT NULL AND team1 <> ''
             UNION ALL
             SELECT team2, CASE WHEN winner = 2 THEN 1 ELSE 0 END, 0,
                    team2kills, team2dragons, team2barons, team2towers
             FROM scoreboardgames
-            WHERE (:op IS NULL OR overviewpage = :op) AND team2 IS NOT NULL AND team2 <> ''
+            WHERE (CAST(:ops AS text[]) IS NULL OR overviewpage = ANY(CAST(:ops AS text[]))) AND team2 IS NOT NULL AND team2 <> ''
         ) x
         GROUP BY team
     """
-    df = _df(engine, sql, op=overview)
+    df = _df(engine, sql, ops=_ops(overview))
     if df.empty:
         return df
     df["losses"] = df["games"] - df["wins"]
@@ -108,9 +150,21 @@ def teams_leaderboard(engine: Engine, overview: str | None) -> pd.DataFrame:
     df["red_wins"] = df["wins"] - df["blue_wins"]
     df["blue_wr"] = (100 * df["blue_wins"] / df["blue_games"].where(df["blue_games"] != 0)).round(0)
     df["red_wr"] = (100 * df["red_wins"] / df["red_games"].where(df["red_games"] != 0)).round(0)
+
+    # Merge in series (BO) record.
+    bo = team_bo_records(engine, overview)
+    if not bo.empty:
+        df = df.merge(bo, on="team", how="left")
+        df["bo_record"] = df.apply(
+            lambda r: f"{int(r['bo_wins'])}-{int(r['bo_games'] - r['bo_wins'])}"
+            if pd.notna(r.get("bo_games")) else None, axis=1)
+    else:
+        df["bo_winrate"] = None
+        df["bo_record"] = None
+
     df = df.sort_values(["winrate", "games"], ascending=[False, False])
-    return df[["team", "games", "wins", "losses", "winrate", "blue_wr", "red_wr",
-               "avg_kills", "dragons", "barons", "towers"]]
+    return df[["team", "games", "wins", "losses", "winrate", "bo_record", "bo_winrate",
+               "blue_wr", "red_wr", "avg_kills", "dragons", "barons", "towers"]]
 
 
 # ----------------------------------------------------------- team scouting
@@ -124,9 +178,9 @@ def team_record(engine: Engine, team: str, overview: str | None) -> dict:
           count(*) FILTER (WHERE team2=:team) AS red_games,
           count(*) FILTER (WHERE team2=:team AND winner=2) AS red_wins
         FROM scoreboardgames
-        WHERE (team1=:team OR team2=:team) AND (:op IS NULL OR overviewpage = :op)
+        WHERE (team1=:team OR team2=:team) AND (CAST(:ops AS text[]) IS NULL OR overviewpage = ANY(CAST(:ops AS text[])))
     """
-    return _df(engine, sql, team=team, op=overview).iloc[0].to_dict()
+    return _df(engine, sql, team=team, ops=_ops(overview)).iloc[0].to_dict()
 
 
 def team_objectives(engine: Engine, team: str, overview: str | None) -> dict:
@@ -139,9 +193,9 @@ def team_objectives(engine: Engine, team: str, overview: str | None) -> dict:
           round(avg(CASE WHEN team1=:team THEN team1voidgrubs ELSE team2voidgrubs END)::numeric, 2) AS grubs,
           round(avg(CASE WHEN team1=:team THEN team1kills ELSE team2kills END)::numeric, 1) AS kills
         FROM scoreboardgames
-        WHERE (team1=:team OR team2=:team) AND (:op IS NULL OR overviewpage = :op)
+        WHERE (team1=:team OR team2=:team) AND (CAST(:ops AS text[]) IS NULL OR overviewpage = ANY(CAST(:ops AS text[])))
     """
-    return _df(engine, sql, team=team, op=overview).iloc[0].to_dict()
+    return _df(engine, sql, team=team, ops=_ops(overview)).iloc[0].to_dict()
 
 
 def team_champion_pool(engine: Engine, team: str, overview: str | None) -> pd.DataFrame:
@@ -151,31 +205,53 @@ def team_champion_pool(engine: Engine, team: str, overview: str | None) -> pd.Da
                sum(CASE WHEN playerwin='Yes' THEN 1 ELSE 0 END) AS wins,
                round(100.0 * sum(CASE WHEN playerwin='Yes' THEN 1 ELSE 0 END) / count(*), 1) AS winrate_pct
         FROM scoreboardplayers
-        WHERE team=:team AND (:op IS NULL OR overviewpage = :op) AND champion <> ''
+        WHERE team=:team AND (CAST(:ops AS text[]) IS NULL OR overviewpage = ANY(CAST(:ops AS text[]))) AND champion <> ''
         GROUP BY champion ORDER BY games DESC, winrate_pct DESC
     """
-    return _df(engine, sql, team=team, op=overview)
+    return _df(engine, sql, team=team, ops=_ops(overview))
 
 
 def team_bans(engine: Engine, team: str, overview: str | None) -> pd.DataFrame:
     sql = """
         WITH g AS (
             SELECT count(*) AS games FROM scoreboardgames
-            WHERE (team1=:team OR team2=:team) AND (:op IS NULL OR overviewpage = :op)
+            WHERE (team1=:team OR team2=:team) AND (CAST(:ops AS text[]) IS NULL OR overviewpage = ANY(CAST(:ops AS text[])))
         )
         SELECT champ AS champion, count(*) AS bans,
                (SELECT games FROM g) AS games,
                round(100.0*count(*) / NULLIF((SELECT games FROM g),0), 1) AS banrate_pct
         FROM (
             SELECT unnest(team1bans) AS champ FROM scoreboardgames
-              WHERE team1=:team AND (:op IS NULL OR overviewpage = :op)
+              WHERE team1=:team AND (CAST(:ops AS text[]) IS NULL OR overviewpage = ANY(CAST(:ops AS text[])))
             UNION ALL
             SELECT unnest(team2bans) FROM scoreboardgames
-              WHERE team2=:team AND (:op IS NULL OR overviewpage = :op)
+              WHERE team2=:team AND (CAST(:ops AS text[]) IS NULL OR overviewpage = ANY(CAST(:ops AS text[])))
         ) b WHERE champ IS NOT NULL AND champ <> ''
         GROUP BY champ ORDER BY bans DESC
     """
-    return _df(engine, sql, team=team, op=overview)
+    return _df(engine, sql, team=team, ops=_ops(overview))
+
+
+def team_game_stats(engine: Engine, team: str, overview: str | None) -> pd.DataFrame:
+    """A team's per-game stats over time (oldest first) for trend charts."""
+    sql = """
+        SELECT gameid, datetime_utc AS date, team1, team2,
+               CASE WHEN team1=:team THEN team2 ELSE team1 END AS opponent,
+               n_gameinmatch AS game_in_match,
+               (2 * max(GREATEST(team1score, team2score)) OVER (PARTITION BY matchid) - 1) AS bo,
+               CASE WHEN team1=:team THEN team1kills   ELSE team2kills   END AS kills,
+               CASE WHEN team1=:team THEN team1gold    ELSE team2gold    END AS gold,
+               CASE WHEN team1=:team THEN team1dragons ELSE team2dragons END AS dragons,
+               CASE WHEN team1=:team THEN team1barons  ELSE team2barons  END AS barons,
+               CASE WHEN team1=:team THEN team1towers  ELSE team2towers  END AS towers,
+               CASE WHEN (team1=:team AND winner=1) OR (team2=:team AND winner=2)
+                    THEN 1 ELSE 0 END AS win
+        FROM scoreboardgames
+        WHERE (team1=:team OR team2=:team)
+          AND (CAST(:ops AS text[]) IS NULL OR overviewpage = ANY(CAST(:ops AS text[])))
+        ORDER BY datetime_utc NULLS LAST
+    """
+    return _df(engine, sql, team=team, ops=_ops(overview))
 
 
 def team_games(engine: Engine, team: str, overview: str | None) -> pd.DataFrame:
@@ -184,10 +260,10 @@ def team_games(engine: Engine, team: str, overview: str | None) -> pd.DataFrame:
                CASE WHEN winner=1 THEN team1 WHEN winner=2 THEN team2 END AS winner,
                patch, gamelength AS length
         FROM scoreboardgames
-        WHERE (team1=:team OR team2=:team) AND (:op IS NULL OR overviewpage = :op)
+        WHERE (team1=:team OR team2=:team) AND (CAST(:ops AS text[]) IS NULL OR overviewpage = ANY(CAST(:ops AS text[])))
         ORDER BY datetime_utc DESC
     """
-    return _df(engine, sql, team=team, op=overview)
+    return _df(engine, sql, team=team, ops=_ops(overview))
 
 
 def top_players_kda(engine: Engine, overview: str | None, limit: int = 3,
@@ -198,13 +274,13 @@ def top_players_kda(engine: Engine, overview: str | None, limit: int = 3,
                sum(kills) AS k, sum(deaths) AS d, sum(assists) AS a,
                round((sum(kills) + sum(assists))::numeric / GREATEST(sum(deaths), 1), 2) AS kda
         FROM scoreboardplayers
-        WHERE (:op IS NULL OR overviewpage = :op) AND name IS NOT NULL AND name <> ''
+        WHERE (CAST(:ops AS text[]) IS NULL OR overviewpage = ANY(CAST(:ops AS text[]))) AND name IS NOT NULL AND name <> ''
         GROUP BY name, team
         HAVING count(*) >= :mg
         ORDER BY kda DESC
         LIMIT :lim
     """
-    return _df(engine, sql, op=overview, mg=min_games, lim=limit)
+    return _df(engine, sql, ops=_ops(overview), mg=min_games, lim=limit)
 
 
 def players_leaderboard(engine: Engine, overview: str | None) -> pd.DataFrame:
@@ -222,12 +298,12 @@ def players_leaderboard(engine: Engine, overview: str | None) -> pd.DataFrame:
                       / NULLIF(sum(sg.gamelength_number), 0))::numeric, 0) AS dpm
         FROM scoreboardplayers sp
         JOIN scoreboardgames sg ON sg.gameid = sp.gameid
-        WHERE (:op IS NULL OR sp.overviewpage = :op)
+        WHERE (CAST(:ops AS text[]) IS NULL OR sp.overviewpage = ANY(CAST(:ops AS text[])))
           AND sp.name IS NOT NULL AND sp.name <> ''
         GROUP BY sp.name, sp.team
         ORDER BY kda DESC
     """
-    return _df(engine, sql, op=overview)
+    return _df(engine, sql, ops=_ops(overview))
 
 
 def top_players_dpm(engine: Engine, overview: str | None, limit: int = 3,
@@ -239,13 +315,13 @@ def top_players_dpm(engine: Engine, overview: str | None, limit: int = 3,
                       / NULLIF(sum(sg.gamelength_number), 0))::numeric, 0) AS dpm
         FROM scoreboardplayers sp
         JOIN scoreboardgames sg ON sg.gameid = sp.gameid
-        WHERE (:op IS NULL OR sp.overviewpage = :op) AND sp.name IS NOT NULL AND sp.name <> ''
+        WHERE (CAST(:ops AS text[]) IS NULL OR sp.overviewpage = ANY(CAST(:ops AS text[]))) AND sp.name IS NOT NULL AND sp.name <> ''
         GROUP BY sp.name, sp.team
         HAVING count(*) >= :mg AND sum(sg.gamelength_number) > 0
         ORDER BY dpm DESC
         LIMIT :lim
     """
-    return _df(engine, sql, op=overview, mg=min_games, lim=limit)
+    return _df(engine, sql, ops=_ops(overview), mg=min_games, lim=limit)
 
 
 # ----------------------------------------------------------------- players
@@ -262,9 +338,9 @@ def player_summary(engine: Engine, name: str, overview: str | None) -> dict:
                round(avg(visionscore)::numeric,1) AS vision,
                round(100.0*sum(CASE WHEN playerwin='Yes' THEN 1 ELSE 0 END)/count(*),1) AS winrate_pct
         FROM scoreboardplayers
-        WHERE name=:name AND (:op IS NULL OR overviewpage = :op)
+        WHERE name=:name AND (CAST(:ops AS text[]) IS NULL OR overviewpage = ANY(CAST(:ops AS text[])))
     """
-    return _df(engine, sql, name=name, op=overview).iloc[0].to_dict()
+    return _df(engine, sql, name=name, ops=_ops(overview)).iloc[0].to_dict()
 
 
 def player_champions(engine: Engine, name: str, overview: str | None) -> pd.DataFrame:
@@ -274,22 +350,28 @@ def player_champions(engine: Engine, name: str, overview: str | None) -> pd.Data
                round(100.0*sum(CASE WHEN playerwin='Yes' THEN 1 ELSE 0 END)/count(*),1) AS winrate_pct,
                round((sum(kills)+sum(assists))::numeric / NULLIF(sum(deaths),0),2) AS kda
         FROM scoreboardplayers
-        WHERE name=:name AND (:op IS NULL OR overviewpage = :op) AND champion <> ''
+        WHERE name=:name AND (CAST(:ops AS text[]) IS NULL OR overviewpage = ANY(CAST(:ops AS text[]))) AND champion <> ''
         GROUP BY champion ORDER BY games DESC
     """
-    return _df(engine, sql, name=name, op=overview)
+    return _df(engine, sql, name=name, ops=_ops(overview))
 
 
 def player_games(engine: Engine, name: str, overview: str | None) -> pd.DataFrame:
     sql = """
-        SELECT datetime_utc AS date, team, champion, role,
-               kills, deaths, assists, cs, gold, damagetochampions AS dmg,
-               visionscore AS vision, playerwin AS win
-        FROM scoreboardplayers
-        WHERE name=:name AND (:op IS NULL OR overviewpage = :op)
-        ORDER BY datetime_utc DESC
+        SELECT sp.datetime_utc AS date, sp.team, sp.teamvs AS opponent,
+               sp.champion, sp.role,
+               sp.kills, sp.deaths, sp.assists, sp.cs, sp.gold,
+               sp.damagetochampions AS dmg, sp.visionscore AS vision, sp.playerwin AS win,
+               sg.n_gameinmatch AS game_in_match,
+               (2 * max(GREATEST(sg.team1score, sg.team2score))
+                    OVER (PARTITION BY sg.matchid) - 1) AS bo
+        FROM scoreboardplayers sp
+        JOIN scoreboardgames sg ON sg.gameid = sp.gameid
+        WHERE sp.name=:name
+          AND (CAST(:ops AS text[]) IS NULL OR sp.overviewpage = ANY(CAST(:ops AS text[])))
+        ORDER BY sp.datetime_utc DESC
     """
-    return _df(engine, sql, name=name, op=overview)
+    return _df(engine, sql, name=name, ops=_ops(overview))
 
 
 # --------------------------------------------------------------- game by game
@@ -302,10 +384,65 @@ def games_list(engine: Engine, overview: str | None) -> pd.DataFrame:
                CASE WHEN winner=1 THEN team1 WHEN winner=2 THEN team2 END AS winner,
                gamelength AS length, patch
         FROM scoreboardgames
-        WHERE (:op IS NULL OR overviewpage = :op) AND gameid IS NOT NULL
+        WHERE (CAST(:ops AS text[]) IS NULL OR overviewpage = ANY(CAST(:ops AS text[]))) AND gameid IS NOT NULL
         ORDER BY datetime_utc DESC NULLS LAST
     """
-    return _df(engine, sql, op=overview)
+    return _df(engine, sql, ops=_ops(overview))
+
+
+def matches_list(engine: Engine, overview: str | None) -> pd.DataFrame:
+    """One row per BO (match/series): teams, final score, format, winner."""
+    sql = """
+        WITH last_game AS (
+            SELECT DISTINCT ON (matchid) matchid, team1, team2,
+                   team1score AS t1, team2score AS t2
+            FROM scoreboardgames
+            WHERE (CAST(:ops AS text[]) IS NULL OR overviewpage = ANY(CAST(:ops AS text[]))) AND matchid IS NOT NULL AND matchid <> ''
+            ORDER BY matchid, n_gameinmatch DESC NULLS LAST, datetime_utc DESC
+        ),
+        agg AS (
+            SELECT matchid, count(*) AS games, min(datetime_utc) AS date
+            FROM scoreboardgames
+            WHERE (CAST(:ops AS text[]) IS NULL OR overviewpage = ANY(CAST(:ops AS text[]))) AND matchid IS NOT NULL AND matchid <> ''
+            GROUP BY matchid
+        )
+        SELECT l.matchid, a.date, l.team1, l.team2, l.t1, l.t2, a.games,
+               (2 * GREATEST(l.t1, l.t2) - 1) AS bo,
+               CASE WHEN l.t1 > l.t2 THEN l.team1 ELSE l.team2 END AS winner
+        FROM last_game l JOIN agg a USING (matchid)
+        ORDER BY a.date DESC NULLS LAST
+    """
+    return _df(engine, sql, ops=_ops(overview))
+
+
+def match_games(engine: Engine, matchid: str) -> pd.DataFrame:
+    """The individual games of a BO, in order."""
+    sql = """
+        SELECT gameid, n_gameinmatch AS game, datetime_utc AS date, team1, team2,
+               CASE WHEN winner=1 THEN team1 WHEN winner=2 THEN team2 END AS winner,
+               gamelength AS length, patch
+        FROM scoreboardgames
+        WHERE matchid = :mid
+        ORDER BY n_gameinmatch NULLS LAST, datetime_utc
+    """
+    return _df(engine, sql, mid=matchid)
+
+
+def match_players(engine: Engine, matchid: str) -> pd.DataFrame:
+    """Player stats aggregated across a whole BO (series totals)."""
+    sql = """
+        SELECT name AS player, team, min(role) AS role, count(*) AS games,
+               sum(kills) AS k, sum(deaths) AS d, sum(assists) AS a,
+               round((sum(kills) + sum(assists))::numeric / GREATEST(sum(deaths), 1), 2) AS kda,
+               round(avg(cs)::numeric, 0) AS cs,
+               sum(damagetochampions) AS dmg,
+               round(avg(visionscore)::numeric, 1) AS vision
+        FROM scoreboardplayers
+        WHERE matchid = :mid AND name IS NOT NULL AND name <> ''
+        GROUP BY name, team
+        ORDER BY team, min(role_number)
+    """
+    return _df(engine, sql, mid=matchid)
 
 
 def game_detail(engine: Engine, gameid: str) -> dict:
@@ -337,26 +474,26 @@ def top_picks(engine: Engine, overview: str | None) -> pd.DataFrame:
                sum(CASE WHEN playerwin='Yes' THEN 1 ELSE 0 END) AS wins,
                round(100.0*sum(CASE WHEN playerwin='Yes' THEN 1 ELSE 0 END)/count(*),1) AS winrate_pct
         FROM scoreboardplayers
-        WHERE (:op IS NULL OR overviewpage = :op) AND champion <> ''
+        WHERE (CAST(:ops AS text[]) IS NULL OR overviewpage = ANY(CAST(:ops AS text[]))) AND champion <> ''
         GROUP BY champion ORDER BY picks DESC
     """
-    return _df(engine, sql, op=overview)
+    return _df(engine, sql, ops=_ops(overview))
 
 
 def top_bans(engine: Engine, overview: str | None) -> pd.DataFrame:
     sql = """
         WITH g AS (
             SELECT count(*) AS games FROM scoreboardgames
-            WHERE (:op IS NULL OR overviewpage = :op)
+            WHERE (CAST(:ops AS text[]) IS NULL OR overviewpage = ANY(CAST(:ops AS text[])))
         )
         SELECT champ AS champion, count(*) AS bans,
                (SELECT games FROM g) AS games,
                round(100.0*count(*) / NULLIF((SELECT games FROM g),0), 1) AS banrate_pct
         FROM (
-            SELECT unnest(team1bans) AS champ FROM scoreboardgames WHERE (:op IS NULL OR overviewpage = :op)
+            SELECT unnest(team1bans) AS champ FROM scoreboardgames WHERE (CAST(:ops AS text[]) IS NULL OR overviewpage = ANY(CAST(:ops AS text[])))
             UNION ALL
-            SELECT unnest(team2bans) FROM scoreboardgames WHERE (:op IS NULL OR overviewpage = :op)
+            SELECT unnest(team2bans) FROM scoreboardgames WHERE (CAST(:ops AS text[]) IS NULL OR overviewpage = ANY(CAST(:ops AS text[])))
         ) b WHERE champ IS NOT NULL AND champ <> ''
         GROUP BY champ ORDER BY bans DESC
     """
-    return _df(engine, sql, op=overview)
+    return _df(engine, sql, ops=_ops(overview))

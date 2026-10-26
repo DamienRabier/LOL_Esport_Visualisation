@@ -15,6 +15,14 @@ export default function RefreshOverlay() {
     setDismissed(false);
   }, [runId]);
 
+  // Ticking elapsed timer so the user sees the process is alive.
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!status?.running) return;
+    const t = setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [status?.running]);
+
   if (!status?.running || dismissed) return null;
 
   const hasData = tournaments.length > 0;
@@ -22,6 +30,10 @@ export default function RefreshOverlay() {
   const doneN = status.done.length;
   const pct = total ? Math.round((100 * doneN) / total) : 0;
   const recent = [...status.done].reverse().slice(0, 8);
+  const elapsed = status.started_at
+    ? Math.max(0, Math.round((Date.now() - new Date(status.started_at).getTime()) / 1000))
+    : 0;
+  const mmss = `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")}`;
 
   return (
     <div className="overlay">
@@ -30,17 +42,22 @@ export default function RefreshOverlay() {
           <span className="spinner big" />
           <div>
             <h2>Updating data</h2>
-            <p className="muted">Refreshing tracked leagues from Leaguepedia…</p>
+            <p className="muted">{status.phase ?? "Refreshing tracked leagues from Leaguepedia…"}</p>
           </div>
+          <span className="overlay-timer">{mmss}</span>
         </div>
 
         <div className={`progress${total ? "" : " indeterminate"}`}>
           <div className="progress-bar" style={total ? { width: `${pct}%` } : undefined} />
         </div>
         <div className="progress-meta">
-          {total ? `${doneN} / ${total} tournaments` : "Preparing catalog…"}
+          {total
+            ? `${doneN} / ${total} tournaments`
+            : (status.phase ?? "Preparing…")}
           {status.skipped ? <span className="muted"> · {status.skipped} finished (skipped)</span> : null}
-          {status.current?.name ? <span className="progress-current"> · {status.current.name}</span> : null}
+          {status.current?.name ? (
+            <span className="progress-current"> · fetching {status.current.name}</span>
+          ) : null}
         </div>
 
         {recent.length > 0 && (

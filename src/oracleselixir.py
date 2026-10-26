@@ -37,6 +37,14 @@ FOLDER_URL = "https://drive.google.com/drive/folders/1gLSw0RLjBbtaNy0dgnGQDAZOHI
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "oracleselixir"
 OE_TABLE = "oe_match_data"
 
+# Authenticated Drive download (bypasses the anonymous per-file quota). The user
+# supplies an OAuth "Desktop app" client at CREDENTIALS_PATH and consents once
+# (via `python -m src.etl.run oe-auth`), which stores a refreshable TOKEN_PATH.
+# Both live under data/ (gitignored). Read-only Drive scope.
+GOOGLE_SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
+CREDENTIALS_PATH = DATA_DIR.parent / "google_credentials.json"
+TOKEN_PATH = DATA_DIR.parent / "google_token.json"
+
 # Stable per-file Drive IDs (captured 2026-06). Used as a fast path so we don't
 # scrape the folder every time; if an ID goes stale we fall back to resolving
 # the folder listing by filename.
@@ -67,11 +75,81 @@ def _resolve_file_id(year: int) -> str | None:
     return None
 
 
+# ------------------------------------------------------ Google Drive (OAuth)
+def authorize_google() -> None:
+    """Run the one-time OAuth consent (opens a browser) and store the token.
+
+    Requires an OAuth 'Desktop app' client JSON at CREDENTIALS_PATH. Run via
+    ``python -m src.etl.run oe-auth``.
+    """
+    from google_auth_oauthlib.flow import InstalledAppFlow
+
+    if not CREDENTIALS_PATH.exists():
+        raise RuntimeError(
+            f"Missing OAuth client file. Create a 'Desktop app' OAuth client in "
+            f"Google Cloud Console (Drive API enabled) and save it as:\n  {CREDENTIALS_PATH}"
+        )
+    flow = InstalledAppFlow.from_client_secrets_file(str(CREDENTIALS_PATH), GOOGLE_SCOPES)
+    creds = flow.run_local_server(port=0)
+    TOKEN_PATH.write_text(creds.to_json(), encoding="utf-8")
+    print(f"[oe] Google authorized; token saved to {TOKEN_PATH.name}.")
+
+
+def _drive_service():
+    """Return an authenticated Drive service, or None if not authorized yet.
+
+    Never launches the interactive flow (safe for the headless backend); only
+    uses/refreshes an existing token.
+    """
+    if not TOKEN_PATH.exists():
+        return None
+    try:
+        from google.auth.transport.requests import Request
+        from google.oauth2.credentials import Credentials
+        from googleapiclient.discovery import build
+
+        creds = Credentials.from_authorized_user_file(str(TOKEN_PATH), GOOGLE_SCOPES)
+        if not creds.valid:
+            if creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+                TOKEN_PATH.write_text(creds.to_json(), encoding="utf-8")
+            else:
+                return None
+        return build("drive", "v3", credentials=creds, cache_discovery=False)
+    except Exception as exc:  # pragma: no cover - defensive
+        print(f"[oe] Drive auth unavailable: {str(exc).splitlines()[0]}")
+        return None
+
+
+def _download_via_drive(file_id: str, out: Path) -> bool:
+    """Authenticated download by file id. Returns True on success, else False."""
+    svc = _drive_service()
+    if svc is None:
+        return False
+    try:
+        from googleapiclient.http import MediaIoBaseDownload
+
+        req = svc.files().get_media(fileId=file_id, supportsAllDrives=True)
+        with open(out, "wb") as fh:
+            downloader = MediaIoBaseDownload(fh, req, chunksize=8 * 1024 * 1024)
+            done = False
+            while not done:
+                _, done = downloader.next_chunk()
+        if out.exists() and out.stat().st_size > 0:
+            print(f"[oe] downloaded {out.name} via Drive API ({out.stat().st_size / 1e6:.1f} MB)")
+            return True
+        return False
+    except Exception as exc:
+        print(f"[oe] Drive API download failed: {str(exc).splitlines()[0]}")
+        return False
+
+
 def download_year(year: int, *, force: bool = False, use_cookies: bool = True) -> Path:
     """Download a year's CSV to ``data/oracleselixir/`` and return its path.
 
-    Cached: skips download if the file already exists unless ``force=True``.
-    Raises a clear error if Google Drive's download quota is hit.
+    Prefers the authenticated Drive API (bypasses the anonymous quota) when a
+    Google token is present; otherwise falls back to anonymous gdown. Cached:
+    skips download if the file already exists unless ``force=True``.
     """
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     out = DATA_DIR / _filename(year)
@@ -83,12 +161,18 @@ def download_year(year: int, *, force: bool = False, use_cookies: bool = True) -
     if not file_id:
         raise ValueError(f"No Oracle's Elixir file found for {year}.")
 
+    # 1) Authenticated download (if the user has run `oe-auth`).
+    if _download_via_drive(file_id, out):
+        return out
+
+    # 2) Fall back to anonymous gdown (subject to Drive's per-file quota).
     try:
         gdown.download(id=file_id, output=str(out), quiet=False, use_cookies=use_cookies)
     except gdown.exceptions.FileURLRetrievalError as exc:
         raise RuntimeError(
-            f"Google Drive blocked the {year} download (per-file quota). This is "
-            f"transient - retry in a while, or download it manually from\n  {FOLDER_URL}\n"
+            f"Google Drive blocked the {year} download (per-file quota). Authorize a "
+            f"Google account with `python -m src.etl.run oe-auth` to bypass it, or "
+            f"download it manually from\n  {FOLDER_URL}\n"
             f"and save it as {out}. Original error: {str(exc).splitlines()[0]}"
         ) from exc
 

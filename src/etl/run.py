@@ -97,6 +97,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_oe = sub.add_parser("oe", help="load Oracle's Elixir match data for a year")
     p_oe.add_argument("year", type=int)
     p_oe.add_argument("--force", action="store_true", help="re-download even if cached")
+
+    sub.add_parser("oe-auth", help="one-time Google OAuth consent for authenticated OE downloads")
     return parser
 
 
@@ -114,6 +116,8 @@ def main(argv: list[str] | None = None) -> None:
         refresh_current_leagues()
     elif args.command == "oe":
         ingest_oracleselixir(args.year, force=args.force)
+    elif args.command == "oe-auth":
+        oe.authorize_google()
 
 
 if __name__ == "__main__":

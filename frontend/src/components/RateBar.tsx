@@ -76,8 +76,7 @@ export default function RateBar({
       const byPos = (sortKey || totalKey) === posKey;
       return (byPos ? b.pos : b.total) - (byPos ? a.pos : a.total);
     })
-    .slice(0, limit)
-    .reverse(); // recharts plots the first item at the bottom
+    .slice(0, limit); // largest first -> rendered at the top (descending)
 
   if (data.length === 0) return <div className="empty">No data.</div>;
 

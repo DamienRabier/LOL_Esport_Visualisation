@@ -4,7 +4,17 @@ import { api, yearOf } from "../api";
 import { useAsync } from "../hooks";
 import { useTournaments } from "../store";
 import RateBar from "../components/RateBar";
+import TrendChart, { type TrendMetric } from "../components/TrendChart";
 import { DataTable, Loader, Metric } from "../components/ui";
+
+const PLAYER_METRICS: TrendMetric[] = [
+  { key: "kda", label: "KDA", compute: (r) => (Number(r.kills) + Number(r.assists)) / Math.max(Number(r.deaths), 1) },
+  { key: "cs", label: "CS" },
+  { key: "dmg", label: "Damage" },
+  { key: "vision", label: "Vision" },
+  { key: "gold", label: "Gold" },
+  { key: "GD@15", label: "Gold diff @ 15" },
+];
 
 export default function Player() {
   const { selected } = useTournaments();
@@ -83,9 +93,23 @@ function PlayerDetail({ player, op, year }: { player: string; op: string; year: 
         />
         <div>
           <h3>Game log</h3>
-          <DataTable rows={data.games} />
+          <DataTable rows={data.games} hideColumns={["game_in_match", "bo"]} />
         </div>
       </div>
+      {data.games.length > 1 && (
+        <>
+          <h3>Trends (per game)</h3>
+          <TrendChart
+            title="Metric over games"
+            rows={[...data.games].reverse()}
+            metrics={PLAYER_METRICS}
+            labelOf={(r) => {
+              const d = r.date ? String(r.date).slice(0, 10) : "";
+              return `Game ${r.game_in_match} Bo${r.bo} vs ${r.opponent} · ${r.champion} · ${d}`;
+            }}
+          />
+        </>
+      )}
       {year && <PlayerEarly player={player} year={year} />}
     </>
   );

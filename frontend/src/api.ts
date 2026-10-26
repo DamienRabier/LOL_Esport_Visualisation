@@ -38,6 +38,9 @@ export const api = {
   games: (op: string) => getJSON<Row[]>(`/api/games?op=${enc(op)}`),
   game: (gameid: string) =>
     getJSON<{ detail: Row; players: Row[] }>(`/api/game?gameid=${enc(gameid)}`),
+  matches: (op: string) => getJSON<Row[]>(`/api/matches?op=${enc(op)}`),
+  match: (matchid: string) =>
+    getJSON<{ games: Row[]; players: Row[] }>(`/api/match?matchid=${enc(matchid)}`),
 
   teams: (op: string) => getJSON<string[]>(`/api/teams?op=${enc(op)}`),
   teamsLeaderboard: (op: string, year?: string) =>
@@ -49,6 +52,7 @@ export const api = {
       champion_pool: Row[];
       bans: Row[];
       games: Row[];
+      trend: Row[];
     }>(`/api/team?name=${enc(name)}&op=${enc(op)}${year ? `&year=${enc(year)}` : ""}`),
 
   players: (op: string, team?: string) =>
@@ -105,6 +109,7 @@ export interface RefreshStatus {
   running: boolean;
   started_at: string | null;
   finished_at: string | null;
+  phase: string | null;
   total: number;
   skipped: number;
   current: { name: string; index: number; total: number } | null;

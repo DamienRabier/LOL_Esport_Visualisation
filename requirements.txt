@@ -10,6 +10,10 @@ SQLAlchemy>=2.0
 
 # Oracle's Elixir match-data downloads (hosted on Google Drive)
 gdown>=5.1
+# Authenticated Drive downloads (bypasses the anonymous quota) via OAuth
+google-api-python-client>=2.100
+google-auth-oauthlib>=1.2
+google-auth>=2.30
 
 # Config
 python-dotenv>=1.0

@@ -38,6 +38,7 @@ _refresh_state: dict = {
     "running": False,
     "started_at": None,
     "finished_at": None,
+    "phase": None,         # human-readable current step
     "total": 0,
     "skipped": 0,          # finished + already-loaded tournaments not re-ingested
     "current": None,       # {"name", "index", "total"}
@@ -58,7 +59,8 @@ def _run_refresh() -> None:
     try:
         _refresh_state.update(
             running=True, started_at=_now(), finished_at=None,
-            total=0, skipped=0, current=None, done=[], errors=[], oe=None,
+            phase="Loading Oracle's Elixir data…", total=0, skipped=0,
+            current=None, done=[], errors=[], oe=None,
         )
 
         # Oracle's Elixir freshness (best effort; won't block Leaguepedia refresh).
@@ -67,17 +69,21 @@ def _run_refresh() -> None:
         except Exception as exc:  # pragma: no cover - defensive
             _refresh_state["oe"] = {"error": str(exc)}
 
+        _refresh_state["phase"] = "Refreshing tournament list…"
+
         def on_event(ev: dict) -> None:
             stage = ev.get("stage")
             if stage == "plan":
                 _refresh_state["total"] = ev.get("total", 0)
                 _refresh_state["skipped"] = ev.get("skipped", 0)
+                _refresh_state["phase"] = "Ingesting tournaments"
             elif stage == "catalog" and not ev.get("ok"):
                 _refresh_state["errors"].append(f"catalog: {ev.get('error')}")
-            elif stage == "tournament":
+            elif stage == "tournament_start":
                 _refresh_state["current"] = {
                     "name": ev.get("name"), "index": ev.get("index"), "total": ev.get("total"),
                 }
+            elif stage == "tournament":
                 if "error" in ev:
                     _refresh_state["errors"].append(f'{ev["name"]}: {ev["error"]}')
                 else:
@@ -87,7 +93,7 @@ def _run_refresh() -> None:
     except Exception as exc:  # pragma: no cover - defensive
         _refresh_state["errors"].append(str(exc))
     finally:
-        _refresh_state.update(running=False, finished_at=_now(), current=None)
+        _refresh_state.update(running=False, finished_at=_now(), current=None, phase=None)
         _refresh_lock.release()
 
 
@@ -226,6 +232,19 @@ def games(op: str | None = None) -> list[dict]:
     return _records(q.games_list(_engine, op))
 
 
+@app.get("/api/matches")
+def matches(op: str | None = None) -> list[dict]:
+    return _records(q.matches_list(_engine, op))
+
+
+@app.get("/api/match")
+def match(matchid: str = Query(...)) -> dict:
+    return {
+        "games": _records(q.match_games(_engine, matchid)),
+        "players": _records(q.match_players(_engine, matchid)),
+    }
+
+
 @app.get("/api/game")
 def game(gameid: str = Query(...)) -> dict:
     # gameid contains slashes (e.g. "LCK/2026 Season/..."), so it's a query
@@ -249,18 +268,29 @@ def game(gameid: str = Query(...)) -> dict:
 def team(name: str = Query(...), op: str | None = None, year: str | None = None) -> dict:
     pool = q.team_champion_pool(_engine, name, op)
     games = q.team_games(_engine, name, op)
+    trend = q.team_game_stats(_engine, name, op)
     if year:
         try:
             pool = oeq.attach_champion_gd15(_engine, pool, year)
             games = oeq.attach_team_games(_engine, games, name, year)
+            trend = oeq.attach_team_games(_engine, trend, name, year)
         except Exception:
             pass
+    record = q.team_record(_engine, name, op)
+    bo = q.team_bo_records(_engine, op)
+    bo_row = bo[bo["team"] == name]
+    if not bo_row.empty:
+        r = bo_row.iloc[0]
+        record["bo_games"] = r["bo_games"]
+        record["bo_wins"] = r["bo_wins"]
+        record["bo_winrate"] = r["bo_winrate"]
     return {
-        "record": _row(q.team_record(_engine, name, op)),
+        "record": _row(record),
         "objectives": _row(q.team_objectives(_engine, name, op)),
         "champion_pool": _records(pool),
         "bans": _records(q.team_bans(_engine, name, op)),
         "games": _records(games),
+        "trend": _records(trend),
     }
 
 

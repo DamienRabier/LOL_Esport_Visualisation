@@ -34,6 +34,9 @@ TRACKED_LEAGUES = [
     "League of Legends Championship of The Americas",         # LTA (combined)
     "League of Legends Championship of The Americas North",   # LTA North
     "League of Legends Championship of The Americas South",   # LTA South
+    "League of Legends Championship Pacific",                 # LCP
+    "Circuit Brazilian League of Legends",                   # CBLOL
+    "Americas Cup",                                           # Americas Cup
     "LCK Challengers League",                                 # LCK CL (Challengers)
     "First Stand",                                            # First Stand
     "Mid-Season Invitational",                               # MSI
@@ -151,6 +154,7 @@ def refresh_tracked(
 
     # 4) Ingest the rest (idempotent upserts).
     for i, name in enumerate(to_ingest, 1):
+        emit(stage="tournament_start", name=name, index=i, total=len(to_ingest))
         try:
             counts_i: dict[str, int] = {}
             for label, rows in ingest_tournament_steps(name, client=client):
